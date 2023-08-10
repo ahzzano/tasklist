@@ -26,6 +26,11 @@ struct Task {
     resolved: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Data {
+    tasks: Vec<Task>,
+}
+
 fn read_console_line(prompt: String) -> String {
     let mut line = String::new();
 
@@ -34,11 +39,6 @@ fn read_console_line(prompt: String) -> String {
     std::io::stdin().read_line(&mut line).unwrap();
 
     line.trim_end().to_string()
-}
-
-#[derive(Serialize, Deserialize)]
-struct Data {
-    tasks: Vec<Task>,
 }
 
 fn add_task(data: &mut Data) {
@@ -50,7 +50,7 @@ fn add_task(data: &mut Data) {
     };
 
     let task = Task {
-        id: id,
+        id,
         content: read_console_line(String::from("Task> ")),
         resolved: false,
     };
@@ -61,10 +61,33 @@ fn add_task(data: &mut Data) {
 fn list_tasks(data: &Data) {
     for i in &data.tasks {
         if i.resolved {
-            println!("{} [x] - {}", i.id, i.content);
+            println!("[x] {} - {}", i.id, i.content);
         } else {
-            println!("{} [ ] - {}", i.id, i.content);
+            println!("[ ] {} - {}", i.id, i.content);
         }
+    }
+}
+
+fn clear_tasks(data: &mut Data) {
+    data.tasks.clear();
+}
+
+fn get_cli_args() -> CLI {
+    let command = std::env::args().nth(1).expect("no command given");
+    let arg1 = match std::env::args().nth(2) {
+        None => String::from(""),
+        Some(s) => s.to_string(),
+    };
+
+    let arg2 = match std::env::args().nth(3) {
+        None => String::from(""),
+        Some(s) => s.to_string(),
+    };
+
+    CLI {
+        command,
+        arg1,
+        arg2,
     }
 }
 
@@ -84,23 +107,7 @@ fn resolve_task(data: &mut Data, cli: &CLI) {
 }
 
 fn main() {
-    let command = std::env::args().nth(1).expect("no command given");
-    let arg1 = match std::env::args().nth(2) {
-        None => String::from(""),
-        Some(s) => s.to_string(),
-    };
-    let arg2 = match std::env::args().nth(3) {
-        None => String::from(""),
-        Some(s) => s.to_string(),
-    };
-
-    let cli_data = CLI {
-        command: command.to_string(),
-        arg1: arg1,
-        arg2: arg2,
-    };
-
-    println!("Command: {}", command);
+    let cli_data = get_cli_args();
     let mut file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -120,10 +127,11 @@ fn main() {
         Err(_) => Data { tasks: Vec::new() },
     };
 
-    match command.as_str() {
+    match cli_data.command.as_str() {
         "list" => list_tasks(&data),
         "add" => add_task(&mut data),
         "resolve" => resolve_task(&mut data, &cli_data),
+        "clear" => clear_tasks(&mut data),
         _ => println!("Invalid command"),
     };
 
