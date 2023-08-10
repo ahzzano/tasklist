@@ -8,10 +8,16 @@ use std::os::windows::prelude::FileExt;
 
 /*
  * tasklist add               - prompts the user to add a task
- * tasklist print             - shows all tasks
+ * tasklist list              - shows all tasks
  * tasklist resolve <task_id> - completes a task
  * tasklist clear             - clears the task list
  */
+
+struct CLI {
+    command: String,
+    arg1: String,
+    arg2: String,
+}
 
 #[derive(Serialize, Deserialize)]
 struct Task {
@@ -36,8 +42,15 @@ struct Data {
 }
 
 fn add_task(data: &mut Data) {
+    let last_task = data.tasks.last();
+
+    let id = match last_task {
+        Some(task) => task.id + 1,
+        None => 0,
+    };
+
     let task = Task {
-        id: 23,
+        id: id,
         content: read_console_line(String::from("Task> ")),
         resolved: false,
     };
@@ -45,8 +58,47 @@ fn add_task(data: &mut Data) {
     data.tasks.push(task);
 }
 
+fn list_tasks(data: &Data) {
+    for i in &data.tasks {
+        if i.resolved {
+            println!("{} [x] - {}", i.id, i.content);
+        } else {
+            println!("{} [ ] - {}", i.id, i.content);
+        }
+    }
+}
+
+fn resolve_task(data: &mut Data, cli: &CLI) {
+    if cli.arg1 == "" {
+        return;
+    }
+
+    let task_id = cli.arg1.parse::<i32>().unwrap();
+
+    for i in &mut data.tasks {
+        if i.id == task_id {
+            i.resolved = true;
+            break;
+        }
+    }
+}
+
 fn main() {
     let command = std::env::args().nth(1).expect("no command given");
+    let arg1 = match std::env::args().nth(2) {
+        None => String::from(""),
+        Some(s) => s.to_string(),
+    };
+    let arg2 = match std::env::args().nth(3) {
+        None => String::from(""),
+        Some(s) => s.to_string(),
+    };
+
+    let cli_data = CLI {
+        command: command.to_string(),
+        arg1: arg1,
+        arg2: arg2,
+    };
 
     println!("Command: {}", command);
     let mut file = OpenOptions::new()
@@ -62,24 +114,22 @@ fn main() {
         .expect("Error reading file");
 
     let dat_result = serde_json::from_str(json_string.as_str());
-    let mut dat: Data;
 
-    match dat_result {
-        Ok(file) => dat = file,
-        Err(error) => dat = Data { tasks: Vec::new() },
-    }
+    let mut data = match dat_result {
+        Ok(file) => file,
+        Err(_) => Data { tasks: Vec::new() },
+    };
+
+    match command.as_str() {
+        "list" => list_tasks(&data),
+        "add" => add_task(&mut data),
+        "resolve" => resolve_task(&mut data, &cli_data),
+        _ => println!("Invalid command"),
+    };
 
     file.set_len(0).expect("Unable to truncate");
 
-    let t = Task {
-        id: 1,
-        content: String::from("Hello"),
-        resolved: false,
-    };
-
-    add_task(&mut dat);
-
-    let t_s = serde_json::to_string(&dat).expect("unable to parse task");
+    let t_s = serde_json::to_string(&data).expect("unable to parse task");
 
     file.set_len(1).expect("Unable to truncate");
     file.seek_write(t_s.as_bytes(), 0)
