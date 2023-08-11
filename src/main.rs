@@ -80,38 +80,17 @@ fn add_task(data: &mut Data) {
     data.tasks.push(task);
 }
 
-fn list_tasks(data: &Data) {
-    let mut to_iter = &data.tasks;
-
-    let testo: Vec<&Task> = to_iter.into_iter().filter(|&x| !x.resolved).collect();
-
-    for i in &data.groups {
-        println!("{ }", i);
-
-        let a = data.tasks.iter().filter(|&x| &x.group == i);
-
-        for task in a {
-            print!("  ");
-            if task.resolved {
-                print!("[x]")
-            } else {
-                print!("[ ]")
-            }
-
-            print!("- {:<3} - {:<10} ", task.id, task.content);
-            if task.project != String::from("") {
-                print!("- {:<10}", task.project)
-            }
-            print!("\n");
-        }
-        print!("\n");
+fn print_all_tasks_in_vec(vec: Vec<&Task>) {
+    if vec.len() <= 0 {
+        return;
     }
-    println!("No Groupings");
+    let last_elem = vec.last().unwrap();
 
-    for task in &data.tasks {
-        print!("  ");
-        if !task.group.is_empty() {
-            continue;
+    for task in &vec {
+        if task.id == last_elem.id {
+            print!("└");
+        } else {
+            print!("├");
         }
 
         if task.resolved {
@@ -126,6 +105,23 @@ fn list_tasks(data: &Data) {
         }
         print!("\n");
     }
+}
+
+fn list_tasks(data: &Data) {
+    for i in &data.groups {
+        println!("{ }", i);
+
+        let a: Vec<&Task> = data.tasks.iter().filter(|&x| &x.group == i).collect();
+
+        print_all_tasks_in_vec(a);
+
+        print!("\n");
+    }
+    println!("No Groupings");
+
+    let non_grouped_tasks: Vec<&Task> = data.tasks.iter().filter(|&x| x.group.is_empty()).collect();
+
+    print_all_tasks_in_vec(non_grouped_tasks);
 }
 
 fn clear_tasks(data: &mut Data) {
