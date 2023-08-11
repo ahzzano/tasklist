@@ -7,16 +7,18 @@ use std::io::Write;
 use std::os::windows::prelude::FileExt;
 
 /*
- * tasklist add               - prompts the user to add a task
- * tasklist list              - shows all tasks
- * tasklist resolve <task_id> - completes a task
- * tasklist clear             - clears the task list
+ * tasklist add <project|task>                   - prompts the user to add a task
+ * tasklist remove <project|task> <task_id|project_tag>
+ * tasklist list <all|project|active>               - shows all tasks
+ * tasklist resolve <task_id>                    - completes a task
+ * tasklist clear              - clears the task list
+ *
+ * Tasks are organized by Project and Groups
  */
 
 struct CLI {
     command: String,
     arg1: String,
-    arg2: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -24,11 +26,22 @@ struct Task {
     id: i32,
     content: String,
     resolved: bool,
+    project: String,
+    group: String,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Data {
     tasks: Vec<Task>,
+    groups: Vec<String>,
+    projects: Vec<Project>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Project {
+    name: String,
+    tag: String,
+    description: String,
 }
 
 fn read_console_line(prompt: String) -> String {
@@ -48,10 +61,19 @@ fn add_task(data: &mut Data) {
         Some(task) => task.id + 1,
         None => 0,
     };
+    let task_name = read_console_line(String::from("Task> "));
+    let task_project = read_console_line(String::from("Project> "));
+    let task_group = read_console_line(String::from("Tag> "));
+
+    if !data.groups.contains(&task_group) {
+        data.groups.push(task_group.clone());
+    }
 
     let task = Task {
         id,
-        content: read_console_line(String::from("Task> ")),
+        content: task_name,
+        project: task_project,
+        group: task_group,
         resolved: false,
     };
 
@@ -59,12 +81,50 @@ fn add_task(data: &mut Data) {
 }
 
 fn list_tasks(data: &Data) {
-    for i in &data.tasks {
-        if i.resolved {
-            println!("[x] {} - {}", i.id, i.content);
-        } else {
-            println!("[ ] {} - {}", i.id, i.content);
+    let mut to_iter = &data.tasks;
+
+    let testo: Vec<&Task> = to_iter.into_iter().filter(|&x| !x.resolved).collect();
+
+    for i in &data.groups {
+        println!("{ }", i);
+
+        let a = data.tasks.iter().filter(|&x| &x.group == i);
+
+        for task in a {
+            print!("  ");
+            if task.resolved {
+                print!("[x]")
+            } else {
+                print!("[ ]")
+            }
+
+            print!("- {:<3} - {:<10} ", task.id, task.content);
+            if task.project != String::from("") {
+                print!("- {:<10}", task.project)
+            }
+            print!("\n");
         }
+        print!("\n");
+    }
+    println!("No Groupings");
+
+    for task in &data.tasks {
+        print!("  ");
+        if !task.group.is_empty() {
+            continue;
+        }
+
+        if task.resolved {
+            print!("[x]")
+        } else {
+            print!("[ ]")
+        }
+
+        print!("- {:<3} - {:<10} ", task.id, task.content);
+        if task.project != String::from("") {
+            print!("- {:<10}", task.project)
+        }
+        print!("\n");
     }
 }
 
@@ -79,16 +139,21 @@ fn get_cli_args() -> CLI {
         Some(s) => s.to_string(),
     };
 
-    let arg2 = match std::env::args().nth(3) {
-        None => String::from(""),
-        Some(s) => s.to_string(),
+    CLI { command, arg1 }
+}
+
+fn add_project(data: &mut Data) {
+    let project_name = read_console_line(String::from("Project> "));
+    let project_tag = read_console_line(String::from("Tag> "));
+    let project_description = read_console_line(String::from("Description> "));
+
+    let project = Project {
+        name: project_name,
+        tag: project_tag,
+        description: project_description,
     };
 
-    CLI {
-        command,
-        arg1,
-        arg2,
-    }
+    data.projects.push(project);
 }
 
 fn resolve_task(data: &mut Data, cli: &CLI) {
@@ -124,12 +189,23 @@ fn main() {
 
     let mut data = match dat_result {
         Ok(file) => file,
-        Err(_) => Data { tasks: Vec::new() },
+        Err(_) => Data {
+            tasks: Vec::new(),
+            groups: Vec::new(),
+            projects: Vec::new(),
+        },
     };
 
     match cli_data.command.as_str() {
         "list" => list_tasks(&data),
-        "add" => add_task(&mut data),
+        "add" => {
+            if cli_data.arg1.as_str() == "task" {
+                add_task(&mut data);
+            }
+            if cli_data.arg1.as_str() == "project" {
+                add_project(&mut data);
+            }
+        }
         "resolve" => resolve_task(&mut data, &cli_data),
         "clear" => clear_tasks(&mut data),
         _ => println!("Invalid command"),
@@ -137,7 +213,7 @@ fn main() {
 
     file.set_len(0).expect("Unable to truncate");
 
-    let t_s = serde_json::to_string(&data).expect("unable to parse task");
+    let t_s = serde_json::to_string_pretty(&data).expect("unable to parse task");
 
     file.set_len(1).expect("Unable to truncate");
     file.seek_write(t_s.as_bytes(), 0)
