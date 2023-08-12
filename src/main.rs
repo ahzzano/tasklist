@@ -1,5 +1,9 @@
-use serde::Deserialize;
-use serde::Serialize;
+mod definitions;
+mod utils;
+
+pub use definitions::{Data, Project, Task, CLI};
+pub use utils::*;
+
 use std;
 use std::fs::OpenOptions;
 use std::io::Read;
@@ -8,51 +12,14 @@ use std::os::windows::prelude::FileExt;
 
 /*
  * tasklist add <project|task>                   - prompts the user to add a task
- * tasklist remove <project|task> <task_id|project_tag>
+ * tasklist remove <project|task> <task_id|project_tag> - removes a task
  * tasklist list <all|project|active>               - shows all tasks
  * tasklist resolve <task_id>                    - completes a task
  * tasklist clear              - clears the task list
+ * tasklist refresh            - refresh tasklist
  *
  * Tasks are organized by Project and Groups
  */
-
-struct CLI {
-    command: String,
-    arg1: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Task {
-    id: i32,
-    content: String,
-    resolved: bool,
-    project: String,
-    group: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Data {
-    tasks: Vec<Task>,
-    groups: Vec<String>,
-    projects: Vec<Project>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Project {
-    name: String,
-    tag: String,
-    description: String,
-}
-
-fn read_console_line(prompt: String) -> String {
-    let mut line = String::new();
-
-    print!("{}", prompt);
-    std::io::stdout().flush().unwrap();
-    std::io::stdin().read_line(&mut line).unwrap();
-
-    line.trim_end().to_string()
-}
 
 fn add_task(data: &mut Data) {
     let last_task = data.tasks.last();
@@ -99,15 +66,15 @@ fn print_all_tasks_in_vec(vec: Vec<&Task>) {
             print!("[ ]")
         }
 
-        print!("- {:<3} - {:<10} ", task.id, task.content);
+        print!(" {:<3} {:<10} ", task.id, task.content);
         if task.project != String::from("") {
-            print!("- {:<10}", task.project)
+            print!(" {:<10}", task.project)
         }
         print!("\n");
     }
 }
 
-fn list_tasks(data: &Data) {
+fn list_tasks(data: &Data, cli_data: &CLI) {
     for i in &data.groups {
         println!("{ }", i);
 
@@ -193,7 +160,7 @@ fn main() {
     };
 
     match cli_data.command.as_str() {
-        "list" => list_tasks(&data),
+        "list" => list_tasks(&data, &cli_data),
         "add" => {
             if cli_data.arg1.as_str() == "task" {
                 add_task(&mut data);
@@ -202,6 +169,7 @@ fn main() {
                 add_project(&mut data);
             }
         }
+
         "resolve" => resolve_task(&mut data, &cli_data),
         "clear" => clear_tasks(&mut data),
         _ => println!("Invalid command"),
